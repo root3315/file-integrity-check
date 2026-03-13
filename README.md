@@ -8,6 +8,7 @@ Quick tool I wrote to verify file integrity with checksums and catch any unautho
 - Stores the checksums in a JSON manifest file
 - Later verifies files against that manifest
 - Reports modified, deleted, and newly added files
+- Calculate or verify hash of individual files
 
 ## Quick Start
 
@@ -50,6 +51,27 @@ python file_integrity.py verify <directory> [--manifest <path>]
 ```
 
 - `--manifest`: Custom path to the manifest file if it's not in the default location
+
+### Hash command
+
+```bash
+python file_integrity.py hash <file> [--algorithm <algo>] [--verify <expected_hash>]
+```
+
+- `--algorithm`: Choose hash algorithm (default: sha256). Options: md5, sha1, sha256, sha512
+- `--verify`: Expected hash value to verify against
+
+Calculate hash of a file:
+```bash
+python file_integrity.py hash ./myfile.txt
+```
+
+Verify a file against a known hash:
+```bash
+python file_integrity.py hash ./myfile.txt --verify abc123...
+```
+
+Exit code is 0 if hash matches (or just calculated), 1 if verification fails.
 
 ## Output
 

@@ -239,10 +239,10 @@ def verify_command(args: list) -> None:
     if len(args) < 1:
         print("Usage: file_integrity.py verify <directory> [--manifest <path>]")
         sys.exit(1)
-    
+
     directory = args[0]
     manifest_path = None
-    
+
     i = 1
     while i < len(args):
         if args[i] == "--manifest" and i + 1 < len(args):
@@ -250,13 +250,13 @@ def verify_command(args: list) -> None:
             i += 2
         else:
             i += 1
-    
+
     if manifest_path is None:
         manifest_path = os.path.join(directory, MANIFEST_FILENAME)
-    
+
     print(f"Verifying directory: {directory}")
     print(f"Using manifest: {manifest_path}")
-    
+
     try:
         manifest = load_manifest(manifest_path)
         results = verify_integrity(directory, manifest)
@@ -269,6 +269,58 @@ def verify_command(args: list) -> None:
         sys.exit(1)
 
 
+def hash_command(args: list) -> None:
+    """Handle the 'hash' command to calculate or verify a single file's hash."""
+    if len(args) < 1:
+        print("Usage: file_integrity.py hash <file> [--algorithm <algo>] [--verify <expected_hash>]")
+        sys.exit(1)
+
+    file_path = args[0]
+    algorithm = DEFAULT_ALGORITHM
+    expected_hash = None
+
+    i = 1
+    while i < len(args):
+        if args[i] == "--algorithm" and i + 1 < len(args):
+            algorithm = args[i + 1]
+            i += 2
+        elif args[i] == "--verify" and i + 1 < len(args):
+            expected_hash = args[i + 1].lower()
+            i += 2
+        else:
+            i += 1
+
+    if not os.path.exists(file_path):
+        print(f"Error: File not found: {file_path}", file=sys.stderr)
+        sys.exit(1)
+
+    if not os.path.isfile(file_path):
+        print(f"Error: Not a file: {file_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        actual_hash = calculate_checksum(file_path, algorithm)
+    except (IOError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if expected_hash is not None:
+        if actual_hash == expected_hash:
+            print(f"OK: {file_path}")
+            print(f"Algorithm: {algorithm}")
+            print(f"Hash: {actual_hash}")
+            sys.exit(0)
+        else:
+            print(f"FAILED: {file_path}")
+            print(f"Algorithm: {algorithm}")
+            print(f"Expected: {expected_hash}")
+            print(f"Actual:   {actual_hash}")
+            sys.exit(1)
+    else:
+        print(f"{actual_hash}  {file_path}")
+        sys.exit(0)
+
+
 def main():
     """Main entry point for the file integrity checker."""
     if len(sys.argv) < 2:
@@ -277,22 +329,26 @@ def main():
         print("\nCommands:")
         print("  create <directory>   Create a new integrity manifest")
         print("  verify <directory>   Verify files against existing manifest")
+        print("  hash <file>          Calculate or verify a single file's hash")
         print("\nOptions:")
         print("  --algorithm <algo>   Hash algorithm (md5, sha1, sha256, sha512)")
         print("  --manifest <path>    Path to manifest file (for verify)")
         print("  --output <path>      Output path for manifest (for create)")
+        print("  --verify <hash>      Expected hash value (for hash command)")
         sys.exit(0)
-    
+
     command = sys.argv[1]
     args = sys.argv[2:]
-    
+
     if command == "create":
         create_command(args)
     elif command == "verify":
         verify_command(args)
+    elif command == "hash":
+        hash_command(args)
     else:
         print(f"Unknown command: {command}")
-        print("Use 'create' or 'verify'")
+        print("Use 'create', 'verify', or 'hash'")
         sys.exit(1)
 
 

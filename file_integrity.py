@@ -10,11 +10,53 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from shutil import get_terminal_size
 
 
 SUPPORTED_ALGORITHMS = ["md5", "sha1", "sha256", "sha512"]
 DEFAULT_ALGORITHM = "sha256"
 MANIFEST_FILENAME = ".integrity_manifest.json"
+
+
+class ProgressBar:
+    """Simple text-based progress bar for long-running operations."""
+
+    def __init__(self, total: int, desc: str = "", width: int = 30):
+        self.total = total
+        self.current = 0
+        self.desc = desc
+        self.width = width
+        self._last_line_length = 0
+
+    def update(self, n: int = 1) -> None:
+        """Update progress by n steps."""
+        self.current += n
+        self._render()
+
+    def _render(self) -> None:
+        """Render the progress bar."""
+        if self.total == 0:
+            percent = 100
+            filled = self.width
+        else:
+            percent = int(100 * self.current / self.total)
+            filled = int(self.width * self.current / self.total)
+
+        bar = "=" * filled + "-" * (self.width - filled)
+        line = f"\r{self.desc}: [{bar}] {self.current}/{self.total} ({percent}%)"
+
+        # Clear any leftover characters from previous render
+        padding = max(0, self._last_line_length - len(line))
+        self._last_line_length = len(line)
+
+        sys.stdout.write(line + " " * padding)
+        sys.stdout.flush()
+
+    def close(self) -> None:
+        """Finish and clear the progress bar line."""
+        self._render()
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
 
 def calculate_checksum(file_path: str, algorithm: str = DEFAULT_ALGORITHM) -> str:
@@ -49,6 +91,8 @@ def scan_directory(directory: str, algorithm: str = DEFAULT_ALGORITHM, recursive
     if not dir_path.is_dir():
         raise NotADirectoryError(f"Path is not a directory: {directory}")
 
+    # First pass: collect all files to scan
+    files_to_scan = []
     pattern = "**/*" if recursive else "*"
 
     for file_path in dir_path.glob(pattern):
@@ -61,15 +105,25 @@ def scan_directory(directory: str, algorithm: str = DEFAULT_ALGORITHM, recursive
             if file_path.name.startswith("."):
                 continue
 
-            try:
-                checksum = calculate_checksum(str(file_path), algorithm)
-                manifest["files"][rel_path] = {
-                    "checksum": checksum,
-                    "size": file_path.stat().st_size,
-                    "modified_time": datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
-                }
-            except (IOError, OSError) as e:
-                print(f"Warning: Could not process {rel_path}: {e}", file=sys.stderr)
+            files_to_scan.append((file_path, rel_path))
+
+    # Second pass: calculate checksums with progress bar
+    progress = ProgressBar(len(files_to_scan), desc="Scanning")
+
+    for file_path, rel_path in files_to_scan:
+        try:
+            checksum = calculate_checksum(str(file_path), algorithm)
+            manifest["files"][rel_path] = {
+                "checksum": checksum,
+                "size": file_path.stat().st_size,
+                "modified_time": datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
+            }
+        except (IOError, OSError) as e:
+            print(f"Warning: Could not process {rel_path}: {e}", file=sys.stderr)
+
+        progress.update()
+
+    progress.close()
 
     return manifest
 
@@ -116,11 +170,16 @@ def verify_integrity(directory: str, manifest: dict) -> dict:
 
             current_files.add(rel_path)
 
+    # Add progress bar for verification
+    total_files = len(recorded_files)
+    progress = ProgressBar(total_files, desc="Verifying")
+
     for rel_path in recorded_files:
         file_path = dir_path / rel_path
 
         if not file_path.exists():
             results["deleted"].append(rel_path)
+            progress.update()
             continue
 
         recorded_data = manifest["files"][rel_path]
@@ -139,6 +198,10 @@ def verify_integrity(directory: str, manifest: dict) -> dict:
                 })
         except (IOError, OSError) as e:
             results["errors"].append({"path": rel_path, "error": str(e)})
+
+        progress.update()
+
+    progress.close()
 
     for rel_path in current_files:
         if rel_path not in recorded_files:

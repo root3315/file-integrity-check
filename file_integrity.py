@@ -10,7 +10,6 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from shutil import get_terminal_size
 
 
 SUPPORTED_ALGORITHMS = ["md5", "sha1", "sha256", "sha512"]

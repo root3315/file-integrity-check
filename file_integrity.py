@@ -95,6 +95,9 @@ def scan_directory(directory: str, algorithm: str = DEFAULT_ALGORITHM, recursive
     pattern = "**/*" if recursive else "*"
 
     for file_path in dir_path.glob(pattern):
+        if file_path.is_symlink():
+            continue
+
         if file_path.is_file():
             rel_path = str(file_path.relative_to(dir_path))
 
@@ -158,6 +161,9 @@ def verify_integrity(directory: str, manifest: dict) -> dict:
 
     pattern = "**/*"
     for file_path in dir_path.glob(pattern):
+        if file_path.is_symlink():
+            continue
+
         if file_path.is_file():
             rel_path = str(file_path.relative_to(dir_path))
 
@@ -298,6 +304,10 @@ def verify_command(args: argparse.Namespace) -> None:
 
 def hash_command(args: argparse.Namespace) -> None:
     """Handle the 'hash' command to calculate or verify a single file's hash."""
+    if os.path.islink(args.file):
+        print(f"Error: Skipping symlink: {args.file}", file=sys.stderr)
+        sys.exit(1)
+
     if not os.path.exists(args.file):
         print(f"Error: File not found: {args.file}", file=sys.stderr)
         sys.exit(1)
